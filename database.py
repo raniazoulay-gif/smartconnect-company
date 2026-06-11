@@ -376,7 +376,9 @@ def init_db():
     for _a in _agents:
         _uname = _a["username"]
         _env_key = _env_key_map.get(_uname, f"AGENT_{_uname.upper()}_PASSWORD")
-        user_defs.append((_a["name"], _uname, os.environ.get(_env_key), 'agent', ''))
+        # regions ברירת מחדל לסוכן = שמו (מתאים לimport Excel שמשתמש בשם הסוכן כregion)
+        default_regions = _a["name"]
+        user_defs.append((_a["name"], _uname, os.environ.get(_env_key), 'agent', default_regions))
     user_defs.append(('מנהל', 'manager', os.environ.get('MANAGER_PASSWORD'), 'manager', 'all'))
     for name, username, password, role, regions in user_defs:
         if not password:
@@ -384,13 +386,14 @@ def init_db():
         pw_hash = hash_password(password)
         try:
             if _is_postgres():
-                # UPSERT — אם קיים עדכן סיסמה, אחרת הכנס
+                # UPSERT — עדכן סיסמה תמיד; regions רק אם ריק (לא לדרוס הגדרות קיימות)
                 db.execute(
                     '''INSERT INTO users (name, username, password_hash, role, regions)
                        VALUES (?,?,?,?,?)
                        ON CONFLICT (username) DO UPDATE SET
                            password_hash=EXCLUDED.password_hash,
-                           name=EXCLUDED.name''',
+                           name=EXCLUDED.name,
+                           regions=CASE WHEN users.regions='' THEN EXCLUDED.regions ELSE users.regions END''',
                     (name, username, pw_hash, role, regions)
                 )
             else:
