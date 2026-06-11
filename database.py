@@ -381,11 +381,23 @@ def init_db():
     for name, username, password, role, regions in user_defs:
         if not password:
             continue
+        pw_hash = hash_password(password)
         try:
-            db.execute(
-                'INSERT INTO users (name, username, password_hash, role, regions) VALUES (?,?,?,?,?)',
-                (name, username, hash_password(password), role, regions)
-            )
+            if _is_postgres():
+                # UPSERT — אם קיים עדכן סיסמה, אחרת הכנס
+                db.execute(
+                    '''INSERT INTO users (name, username, password_hash, role, regions)
+                       VALUES (?,?,?,?,?)
+                       ON CONFLICT (username) DO UPDATE SET
+                           password_hash=EXCLUDED.password_hash,
+                           name=EXCLUDED.name''',
+                    (name, username, pw_hash, role, regions)
+                )
+            else:
+                db.execute(
+                    'INSERT OR REPLACE INTO users (name, username, password_hash, role, regions) VALUES (?,?,?,?,?)',
+                    (name, username, pw_hash, role, regions)
+                )
         except Exception:
             pass
 
